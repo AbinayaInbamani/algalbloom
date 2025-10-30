@@ -10,7 +10,7 @@ Map.centerObject(lake, 9);
 //  Load Sentinel-2 SR HARMONIZED images
 var s2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
   .filterBounds(lake)
-  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
   .select(['B2','B3','B4','B5','B11']);  // Blue, Green, Red, Red-Edge, SWIR1
 
 //  Compute NDCI (Chlorophyll) & MNDWI (Water)
