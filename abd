@@ -1,0 +1,64 @@
+
+
+// Define lake area
+var lake = ee.Geometry.Polygon([
+  [[-81.3, 27.25], [-81.3, 26.55],
+   [-80.6, 26.55], [-80.6, 27.25]]
+]);
+Map.centerObject(lake, 9);
+
+//  Load Sentinel-2 SR HARMONIZED images
+var s2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+  .filterBounds(lake)
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+  .select(['B2','B3','B4','B5','B11']);  // Blue, Green, Red, Red-Edge, SWIR1
+
+//  Compute NDCI (Chlorophyll) & MNDWI (Water)
+function addIndices(img) {
+  var ndci  = img.normalizedDifference(['B5','B4']).rename('NDCI');
+  var mndwi = img.normalizedDifference(['B3','B11']).rename('MNDWI');
+  return img.addBands([ndci, mndwi])
+            .set('system:time_start', img.get('system:time_start'));
+}
+var withIndices = s2.map(addIndices);
+
+// Monthly composites (2022)
+var visNDCI = {min:0, max:0.4, palette:['white','yellow','orange','red']};
+var months = ee.List.sequence(1,12);
+months.evaluate(function(list){
+  list.forEach(function(m){
+    var start = ee.Date.fromYMD(2022,m,1);
+    var end   = start.advance(1,'month');
+    var img   = withIndices.filterDate(start,end).median().clip(lake);
+    Map.addLayer(img.select('NDCI'), visNDCI,
+                 'NDCI '+start.format('MMM').getInfo());
+  });
+});
+
+//  True-Color reference (July 2022)
+var july = withIndices.filterDate('2022-07-01','2022-07-31').median();
+Map.addLayer(july.select(['B4','B3','B2']),
+             {min:500,max:2500}, 'True Color (July 2022)');
+
+// Highlight bloom zones
+var algaeMask = july.select('NDCI').gt(0.1)
+                    .and(july.select('MNDWI').gt(0.3))
+                    .selfMask();
+Map.addLayer(algaeMask,{palette:['#31a354']},
+             'Likely Algal Bloom (July 2022)');
+
+// Time-series chart (2021–2023)
+var chart = ui.Chart.image.series({
+    imageCollection: withIndices.select('NDCI'),
+    region: lake,
+    reducer: ee.Reducer.mean(),
+    scale: 100
+}).setOptions({
+    title:' Lake Okeechobee – Mean Chlorophyll Index (2021–2023)',
+    hAxis:{title:'Date'},
+    vAxis:{title:'NDCI (Chlorophyll proxy)'},
+    lineWidth:2,
+    pointSize:3,
+    colors:['#1B5E20']
+});
+print(chart);
